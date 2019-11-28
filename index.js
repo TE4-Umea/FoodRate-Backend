@@ -47,16 +47,26 @@ function getDocByFieldValue(collection, field, value) {
 }
 
 getUserByAppId = async (appId) => {
-    //var user = await getDocByFieldValue("users", "app_id", appId);
+    var user = await getDocByFieldValue("users", "app_id", appId);
     if (user === null) console.log("ERROR", "could not get user");
     return user;
 }
 
+
+function getCollection(collection) {
+    return new Promise((resolve, reject) => {
+        db.collection(collection).get().then(querySnapshot => {
+            let docs = [];
+            querySnapshot.forEach(doc => docs.push(doc.data()));
+            resolve(docs)
+        });
+    });
+}
+
 class RateEvent {
     constructor(user, rating) {
-        this.user = user;
+        this.author_id = user.app_id;
         this.rating = rating;
-
         return this;
     }
 }
@@ -67,7 +77,7 @@ app.post('/post_test', (req, res) => {
     res.send('post_test_response');
 })
 
-app.post('/rate_event', async (req, res) => {
+app.get('/rate_event', async (req, res) => {
     console.log(`[rate_event]`);
 
     let rateEvent = new RateEvent(
@@ -75,11 +85,36 @@ app.post('/rate_event', async (req, res) => {
         req.query.rating
     );
 
-    console.log(rateEvent)
+    console.log(rateEvent);
 
     //db.collection("ratings").add(rateEvent);
-    res.send('nice');
+    res.send(rateEvent);
 });
+
+app.get('/rate_event_new', async (req, res) => {
+    console.log(`[rate_event]`);
+
+    let rateEvent = new RateEvent(
+        await getUserByAppId(req.query.app_id),
+        req.query.rating
+    );
+
+    console.log(rateEvent);
+
+    db.collection("ratings").add(rateEvent);
+    res.send(rateEvent);
+});
+
+app.get('/fetch_food_menu_event', async (req, res) => {
+    console.log(`[fetch_food_menu_event]`);
+
+    let foodMenu = await getCollection("foodMenu");
+
+    console.log(foodMenu);
+
+    res.send(foodMenu);
+});
+
 
 app.post('/comment_event', (req, res) => {
     console.log(`[comment_event]`);
@@ -96,3 +131,28 @@ app.post('/generate_key_event', (req, res) => {
     res.send('nice');
 });
 
+let adminToken = "test";
+
+app.get('/admin_fetch_data', async (req, res) => {
+    console.log(`[admin_fetch_data]`);
+    let response
+    if (req.query.admin_key = adminToken) {
+
+        let users = await getCollection("users");
+        let ratings = await getCollection("ratings");
+        let comments = await getCollection("comments");
+        let foodMenu = await getCollection("foodMenu");
+        response = {
+            users: users,
+            ratings: ratings,
+            comments: comments,
+            foodMenu: foodMenu
+        }
+
+        console.log(response);
+    } else {
+        response = "invalid admin key"
+    }
+
+    res.send(response);
+})
