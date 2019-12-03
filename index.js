@@ -53,14 +53,21 @@ function getDocsByFieldValue(collection, field, value) {
 }
 
 getUserByAppId = async (appId) => {
+    let result;
     let users = await getDocsByFieldValue("users", "app_id", appId);
-    return users[0];
+    if (users) result = users[0];
+    else result = false;
+
+    return result;
 }
 
 getLatestRatingByUserId = async (userId) => {
+    let result;
     let userRatings = await getDocsByFieldValue("ratings", "author_id", userId);
-    let latestRating = userRatings.sort((a, b) => (a.timestamp.seconds < b.timestamp.seconds) ? 1 : -1)[0];
-    return latestRating;
+    if (userRatings.length > 0) result = userRatings.sort((a, b) => (a.timestamp.seconds < b.timestamp.seconds) ? 1 : -1)[0];
+    else if (userRatings.length == 0) result = "never";
+    else result = false;
+    return result;
 }
 
 getFoodMenuByWeek = async (week) => {
@@ -70,37 +77,50 @@ getFoodMenuByWeek = async (week) => {
 
 
 app.post('/rate', async (req, res) => {
-    console.log(`[rate]`, req.query);
+    logIncomingRequest(req);
 
     let user = await getUserByAppId(req.query.app_id)
+    if (!user) new ErrorResponse(res, "Could not validate user");
     let latestRating = await getLatestRatingByUserId(user.id)
-    let latestTime = new Date();
-    latestTime.setTime(latestRating.timestamp.seconds);
+    console.log(latestRating);
+    if (!latestRating) new ErrorResponse(res, "Could not get lastest rating", latestRating);
 
-    console.log(latestTime.getMonth(), latestTime.getDate())
+    let userHasRated = false;
+    if (latestRating !== "never") {
+        let now = new Date();
+        let latestTime = new Date()
+        latestTime.setTime(latestRating.timestamp.seconds * 1000)
 
-    let newRating = {
-        author_id: user.id,
-        timestamp: new Date(),
-        rating: req.query.rating,
-    };
-
-    if (req.query.comment) {
-        newRating.comment = req.query.comment
-        newRating.has_told_staff = req.query.has_told_staff
+        if (latestTime.toDateString() == now.toDateString()) userHasRated = true;
     }
 
-    console.log(newRating);
+    if (userHasRated) new ErrorResponse(res, "User has already submitted a rating today.")
+    else {
 
-    db.collection("ratings").add(newRating);
+        let newRating = {
+            author_id: user.id,
+            timestamp: new Date(),
+            rating: req.query.rating,
+        };
 
-    new SuccessResponse(res, "Rating Successful");
+        if (req.query.comment) {
+            newRating.comment = req.query.comment
+            newRating.has_told_staff = req.query.has_told_staff
+        }
+
+        let dbResponse = await db.collection("ratings").add(newRating);
+
+        if (!dbResponse) new ErrorResponse(res, "Failed to add rating to database", e);
+
+        new SuccessResponse(res, "Rating Successful");
+    }
 });
 
 app.post('/comment', async (req, res) => {
-    console.log(`/comment`, req.query);
+    logIncomingRequest(req);
     let user = await getUserByAppId(req.query.app_id)
     let latestRating = await getLatestRatingByUserId(user.id)
+
 
     let updatedRating = {
         author_id: latestRating.author_id,
@@ -117,7 +137,7 @@ app.post('/comment', async (req, res) => {
 });
 
 app.get('/fetch_menu', async (req, res) => {
-    console.log(`[fetch_menu]`, req.query);
+    logIncomingRequest(req);
     let foodMenu = await getFoodMenuByWeek(JSON.parse(req.query.week));
 
     console.log(foodMenu);
@@ -126,19 +146,19 @@ app.get('/fetch_menu', async (req, res) => {
 });
 
 app.post('/user_register', (req, res) => {
-    console.log(`[user_register]`, req.query);
+    logIncomingRequest(req);
     res.send('nice');
 });
 
 app.post('/generate_key', (req, res) => {
-    console.log(`[generate_key]`, req.query);
+    logIncomingRequest(req);
     res.send('nice');
 });
 
 let adminToken = "test";
 
 app.get('/admin_fetch_data', async (req, res) => {
-    console.log(`[admin_fetch_data]`, req.query);
+    logIncomingRequest(req);
     let data
     if (req.query.admin_key === adminToken) {
 
@@ -159,13 +179,20 @@ app.get('/admin_fetch_data', async (req, res) => {
     }
 })
 
+logIncomingRequest = (req) => {
+    console.log("->", req.route.path, req.query);
+}
+
 class Response {
     constructor(res, message, status, params) {
         this.message = message;
         this.status = status;
         for (let property in params) this[property] = params[property];
 
+
         res.send(this);
+        console.log("<-", this);
+        return;
     }
 }
 
