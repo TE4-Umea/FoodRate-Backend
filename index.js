@@ -40,6 +40,7 @@ function getCollection(collection) {
  */
 function getDocsByFieldValue(collection, field, value) {
     return new Promise(resolve => {
+
         db.collection(collection).where(field, "==", value).get().then(querySnapshot => {
             let result = [];
             querySnapshot.forEach(doc => {
@@ -71,19 +72,30 @@ getLatestRatingByUserId = async (userId) => {
 }
 
 getFoodMenuByWeek = async (week) => {
-    let foodMenu = await getDocsByFieldValue("foodMenu", "week", week);
-    return foodMenu;
+    let result
+    result = await getDocsByFieldValue("foodMenu", "week", week);
+    if (!result) result = false;
+    return result;
 }
 
 
 app.post('/rate', async (req, res) => {
     logIncomingRequest(req);
 
+    let expectedParams = {
+        app_id: new String(),
+        rating: new Number()
+    }
+
+    for (let param in expectedParams) if (req.query[param] === undefined) {
+        new ErrorResponse(res, `Missing required parameter "${param}"`); return;
+    }
+
+
     let user = await getUserByAppId(req.query.app_id)
     if (!user) new ErrorResponse(res, "Could not validate user");
     let latestRating = await getLatestRatingByUserId(user.id)
-    console.log(latestRating);
-    if (!latestRating) new ErrorResponse(res, "Could not get lastest rating", latestRating);
+    if (!latestRating) new ErrorResponse(res, "Could not get lastest rating");
 
     let userHasRated = false;
     if (latestRating !== "never") {
@@ -94,7 +106,8 @@ app.post('/rate', async (req, res) => {
         if (latestTime.toDateString() == now.toDateString()) userHasRated = true;
     }
 
-    if (userHasRated) new ErrorResponse(res, "User has already submitted a rating today.")
+
+    if (userHasRated && false) new ErrorResponse(res, "User has already submitted a rating today.")
     else {
 
         let newRating = {
@@ -110,7 +123,7 @@ app.post('/rate', async (req, res) => {
 
         let dbResponse = await db.collection("ratings").add(newRating);
 
-        if (!dbResponse) new ErrorResponse(res, "Failed to add rating to database", e);
+        if (!dbResponse) new ErrorResponse(res, "Failed to add rating to database");
 
         new SuccessResponse(res, "Rating Successful");
     }
@@ -139,8 +152,7 @@ app.post('/comment', async (req, res) => {
 app.get('/fetch_menu', async (req, res) => {
     logIncomingRequest(req);
     let foodMenu = await getFoodMenuByWeek(JSON.parse(req.query.week));
-
-    console.log(foodMenu);
+    if (!foodMenu) new ErrorResponse(res, "Could not get menu");
 
     new SuccessResponse(res, "Menu fetch successful", foodMenu);
 });
@@ -192,7 +204,7 @@ class Response {
 
         res.send(this);
         console.log("<-", this);
-        return;
+        return this;
     }
 }
 
