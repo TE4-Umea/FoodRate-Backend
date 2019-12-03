@@ -73,20 +73,28 @@ app.post('/rate', async (req, res) => {
     console.log(`[rate]`, req.query);
 
     let user = await getUserByAppId(req.query.app_id)
-    let rateEvent = {
+    let latestRating = await getLatestRatingByUserId(user.id)
+    let latestTime = new Date();
+    latestTime.setTime(latestRating.timestamp.seconds);
+
+    console.log(latestTime.getMonth(), latestTime.getDate())
+
+    let newRating = {
         author_id: user.id,
         timestamp: new Date(),
         rating: req.query.rating,
     };
 
-    if (req.comment) rateEvent.comment = req.comment
+    if (req.query.comment) {
+        newRating.comment = req.query.comment
+        newRating.has_told_staff = req.query.has_told_staff
+    }
 
-    console.log(rateEvent);
+    console.log(newRating);
 
-    db.collection("ratings").add(rateEvent);
+    db.collection("ratings").add(newRating);
 
-    let response = new SuccessResponse("Rating Successful");
-    res.send(response);
+    new SuccessResponse(res, "Rating Successful");
 });
 
 app.post('/comment', async (req, res) => {
@@ -115,7 +123,7 @@ app.get('/fetch_menu', async (req, res) => {
 
     console.log(foodMenu);
 
-    res.send(foodMenu);
+    new SuccessResponse(res, "Menu fetch successful", foodMenu);
 });
 
 app.post('/user_register', (req, res) => {
@@ -133,7 +141,7 @@ let adminToken = "test";
 app.get('/admin_fetch_data', async (req, res) => {
     console.log(`[admin_fetch_data]`, req.query);
     let data
-    if (req.query.admin_key = adminToken) {
+    if (req.query.admin_key === adminToken) {
 
         let users = await getCollection("users");
         let ratings = await getCollection("ratings");
@@ -150,22 +158,14 @@ app.get('/admin_fetch_data', async (req, res) => {
     } else {
         new ErrorResponse(res, "Invalid admin key");
     }
-
-    //res.send(response);
 })
-
-sendSuccessResponse = () => {
-
-
-
-    res.send(successResponse);
-}
 
 class Response {
     constructor(res, message, status, params) {
         this.message = message;
         this.status = status;
         for (let property in params) this[property] = params[property];
+
         res.send(this);
     }
 }
