@@ -105,8 +105,7 @@ app.post('/comment', async (req, res) => {
 
     db.collection("ratings").doc(latestRating.id).set(updatedRating);
 
-    let response = new SuccessResponse(res, "")
-    res.send(response);
+    let response = new SuccessResponse(res, "Comment successful");
 });
 
 app.get('/fetch_menu', async (req, res) => {
