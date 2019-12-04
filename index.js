@@ -1,13 +1,13 @@
 console.log("\n---------------[ FoodRate Server ]---------------\n");
 
 
-
 const config = require("./config");
 const express = require("express");
 const firebase = require("firebase");
 require("firebase/firestore");
 
 const app = express();
+
 app.listen(config.server.port, () => console.log(`Listening on port: ${config.server.port}`));
 
 firebase.initializeApp(config.firebase);
@@ -16,7 +16,6 @@ const db = firebase.firestore();
 
 
 /**
- * 
  * @param {String} collection 
  */
 function getCollection(collection) {
@@ -79,6 +78,16 @@ getFoodMenuByWeek = async (week) => {
 }
 
 
+app.get('/test', async (req, res) => {
+    logIncomingRequest(req);
+    let result = await db.get();
+    console.log(result)
+    //new SuccessResponse(res, "Test Message", result);
+});
+
+
+/*Client Requests*/
+
 app.post('/rate', async (req, res) => {
     logIncomingRequest(req);
 
@@ -132,8 +141,15 @@ app.post('/rate', async (req, res) => {
 app.post('/comment', async (req, res) => {
     logIncomingRequest(req);
     let user = await getUserByAppId(req.query.app_id)
+    if (!user) {
+        new ErrorResponse(res, "Could not validate user");
+        return;
+    }
     let latestRating = await getLatestRatingByUserId(user.id)
-
+    if (!latestRating) {
+        new ErrorResponse(res, "Could not get lastest rating");
+        return;
+    }
 
     let updatedRating = {
         author_id: latestRating.author_id,
@@ -144,9 +160,9 @@ app.post('/comment', async (req, res) => {
 
     console.log("Updated Rating", updatedRating);
 
-    db.collection("ratings").doc(latestRating.id).set(updatedRating);
+    await db.collection("ratings").doc(latestRating.id).set(updatedRating);
 
-    let response = new SuccessResponse(res, "Comment successful");
+    new SuccessResponse(res, "Comment successful");
 });
 
 app.get('/fetch_menu', async (req, res) => {
@@ -162,37 +178,40 @@ app.post('/user_register', (req, res) => {
     res.send('nice');
 });
 
+
+/*Admin Requests*/
+
 app.post('/generate_key', (req, res) => {
     logIncomingRequest(req);
     res.send('nice');
 });
 
-let adminToken = "test";
 
 app.get('/admin_fetch_data', async (req, res) => {
     logIncomingRequest(req);
-    let data
-    if (req.query.admin_key === adminToken) {
 
-        let users = await getCollection("users");
-        let ratings = await getCollection("ratings");
-        let comments = await getCollection("comments");
-        let foodMenu = await getCollection("foodMenu");
-        data = {
-            users: users,
-            ratings: ratings,
-            comments: comments,
-            foodMenu: foodMenu
-        }
-
-        new SuccessResponse(res, "Data fetch successful", data);
-    } else {
+    res.set('Access-Control-Allow-Origin', 'https://te4umea2019.github.io')
+    if (req.query.admin_key !== config.admin.token) {
         new ErrorResponse(res, "Invalid admin key");
+        return;
     }
+
+    let users = await getCollection("users");
+    let ratings = await getCollection("ratings");
+    let comments = await getCollection("comments");
+    let foodMenu = await getCollection("foodMenu");
+    let data = {
+        users: users,
+        ratings: ratings,
+        comments: comments,
+        foodMenu: foodMenu
+    }
+
+    new SuccessResponse(res, "Data fetch successful", data);
 })
 
 logIncomingRequest = (req) => {
-    console.log("->", req.route.path, req.query);
+    console.log("->", req.route.path, req.query, req.originalUrl);
 }
 
 class Response {
@@ -200,7 +219,6 @@ class Response {
         this.message = message;
         this.status = status;
         for (let property in params) this[property] = params[property];
-
 
         res.send(this);
         console.log("<-", this);
@@ -213,7 +231,6 @@ class SuccessResponse extends Response {
         super(res, message, "success", params);
     }
 }
-
 
 class ErrorResponse extends Response {
     constructor(res, message, params) {
